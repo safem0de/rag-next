@@ -14,9 +14,11 @@ python -m venv .venv
 cd fastapi
 pip install -r requirements.txt
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
+http://localhost:8000/docs
 ```
 ### nextjs
 ```bash
 npm install
 npm run dev -- -p 3001
+http://localhost:3001/upload
 ```
