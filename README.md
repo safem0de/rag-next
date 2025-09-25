@@ -19,6 +19,10 @@ http://localhost:8000/docs
 ### nextjs
 ```bash
 npm install
+สร้าง .env.local
 npm run dev -- -p 3001
 http://localhost:3001/upload
 ```
+
+### .env.local
+INGEST_API_URL=http://localhost:8000
