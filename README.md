@@ -17,5 +17,6 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 ### nextjs
 ```bash
+npm install
 npm run dev -- -p 3001
 ```
