@@ -16,6 +16,7 @@ cd fastapi
 pip install -r requirements.txt
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 http://localhost:8000/docs
+pip freeze > requirements.txt
 ```
 ### nextjs
 ```bash
