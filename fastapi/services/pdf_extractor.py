@@ -9,10 +9,13 @@ import torch
 IMG_DIR = "uploads/images"
 os.makedirs(IMG_DIR, exist_ok=True)
 
-# โหลด mT5 Summarization model
-model_name = "csebuetnlp/mT5_multilingual_XLSum"  # รองรับไทย
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+MODEL_NAME = "csebuetnlp/mT5_multilingual_XLSum"
+tokenizer = AutoTokenizer.from_pretrained(
+    MODEL_NAME,
+    legacy=False,
+    use_fast=False
+)
+model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
 
 def extract_pdf_content(pdf_path: str):
     doc = fitz.open(pdf_path)
