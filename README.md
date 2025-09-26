@@ -27,3 +27,12 @@ http://localhost:3001/upload
 
 ### .env.local
 INGEST_API_URL=http://localhost:8000
+OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
+
+### ใช้ OpenAI
+ใน Python จะถูกอ่านอัตโนมัติ (ผ่าน langchain_openai.OpenAIEmbeddings)
+OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
+
+### ใช้ Gemini
+pip install google-generativeai sentence-transformers
+GEMINI_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxx

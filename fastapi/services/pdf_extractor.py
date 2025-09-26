@@ -1,5 +1,8 @@
 import fitz
 import os
+from pythainlp.tokenize import word_tokenize
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.schema import Document
 
 IMG_DIR = "uploads/images"
 os.makedirs(IMG_DIR, exist_ok=True)
@@ -38,3 +41,15 @@ def extract_pdf_content(pdf_path: str):
             })
 
     return content_chunks
+
+def preprocess_text(text: str) -> str:
+    return " ".join(word_tokenize(text, engine="newmm"))
+
+def chunk_text(texts: list[str]):
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=500,
+        chunk_overlap=50,
+        length_function=len,
+    )
+    documents = [Document(page_content=t) for t in texts]
+    return splitter.split_documents(documents)
