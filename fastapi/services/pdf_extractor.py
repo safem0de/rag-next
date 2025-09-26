@@ -3,9 +3,16 @@ import os
 from pythainlp.tokenize import word_tokenize
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+import torch
 
 IMG_DIR = "uploads/images"
 os.makedirs(IMG_DIR, exist_ok=True)
+
+# โหลด mT5 Summarization model
+model_name = "csebuetnlp/mT5_multilingual_XLSum"  # รองรับไทย
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
 
 def extract_pdf_content(pdf_path: str):
     doc = fitz.open(pdf_path)
@@ -44,6 +51,23 @@ def extract_pdf_content(pdf_path: str):
 
 def preprocess_text(text: str) -> str:
     return " ".join(word_tokenize(text, engine="newmm"))
+
+def summarize_text(text: str, max_len: int = 150) -> str:
+    """สรุปข้อความด้วย mT5"""
+    inputs = tokenizer(
+        "summarize: " + text,
+        return_tensors="pt",
+        max_length=512,
+        truncation=True
+    )
+    summary_ids = model.generate(
+        inputs["input_ids"],
+        num_beams=4,
+        length_penalty=1.0,
+        max_length=max_len,
+        early_stopping=True
+    )
+    return tokenizer.decode(summary_ids[0], skip_special_tokens=True)
 
 def chunk_text(texts: list[str]):
     splitter = RecursiveCharacterTextSplitter(
