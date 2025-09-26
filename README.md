@@ -36,3 +36,11 @@ OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
 ### ใช้ Gemini
 pip install google-generativeai sentence-transformers
 GEMINI_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxx
+
+
+OpenAI (text-embedding-3-small) → 1536 dimensions
+Google models/embedding-001 → 768 dimensions
+1. Ingest → Qdrant ด้วย OpenAI Embedding
+2. User ถาม → encode question ด้วย OpenAI Embedding → ค้นหา context จาก Qdrant
+3. ส่ง context + question เข้า Gemini 1.5 Flash → ให้มัน generate คำตอบ
+embedding model กับ LLM model แยกกัน

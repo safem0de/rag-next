@@ -34,3 +34,12 @@ def embed_and_store(chunks, collection="pdf_docs"):
         ],
     )
     return len(vectors)
+
+def query_vector_db(query: str, top_k: int = 3):
+    vector = embeddings.embed_query(query)
+    results = qdrant.search(
+        collection_name="pdf_docs",
+        query_vector=vector,
+        limit=top_k
+    )
+    return [{"id": r.id, "score": r.score, "payload": r.payload} for r in results]
