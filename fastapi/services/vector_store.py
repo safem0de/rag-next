@@ -7,20 +7,30 @@ import os
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
 
-# connect Qdrant
+# Connect Qdrant
 qdrant = QdrantClient(url="http://localhost:6333")
 embeddings = OpenAIEmbeddings(model="text-embedding-3-small", api_key=api_key)
 
-def embed_and_store(chunks, collection="pdf_docs"):
-    vectors = embeddings.embed_documents([c.page_content for c in chunks])
+COLLECTION_NAME = "pdf_docs"
 
-    # สร้าง collection ถ้ายังไม่มี
-    qdrant.recreate_collection(
-        collection_name=collection,
-        vectors_config=models.VectorParams(
-            size=len(vectors[0]), distance=models.Distance.COSINE
-        ),
-    )
+
+def init_collection(vector_size: int, collection_name="pdf_docs"):
+    try:
+        # ถ้า collection มีอยู่แล้ว จะไม่ error
+        qdrant.get_collection(collection_name=collection_name)
+    except Exception:
+        # ถ้าไม่มี ให้สร้างใหม่
+        qdrant.create_collection(
+            collection_name=collection_name,
+            vectors_config=models.VectorParams(
+                size=vector_size,
+                distance=models.Distance.COSINE
+            ),
+        )
+
+def embed_and_store(chunks, payloads=None, collection="pdf_docs"):
+    vectors = embeddings.embed_documents([c.page_content for c in chunks])
+    init_collection(len(vectors[0]), collection)
 
     qdrant.upsert(
         collection_name=collection,
@@ -28,18 +38,31 @@ def embed_and_store(chunks, collection="pdf_docs"):
             models.PointStruct(
                 id=i,
                 vector=vectors[i],
-                payload={"text": chunks[i].page_content},
+                payload={
+                    "text": chunks[i].page_content,
+                    **(payloads[i] if payloads else {}),
+                },
             )
             for i in range(len(chunks))
         ],
     )
     return len(vectors)
 
-def query_vector_db(query: str, top_k: int = 3):
+def query_vector_db(query: str, top_k: int = 5):
+    """
+    ดึงข้อมูลใกล้เคียงจาก Qdrant
+    """
     vector = embeddings.embed_query(query)
     results = qdrant.search(
-        collection_name="pdf_docs",
+        collection_name=COLLECTION_NAME,
         query_vector=vector,
         limit=top_k
     )
-    return [{"id": r.id, "score": r.score, "payload": r.payload} for r in results]
+    return [
+        {
+            "id": r.id,
+            "score": r.score,
+            "payload": r.payload
+        }
+        for r in results
+    ]
