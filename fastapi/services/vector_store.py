@@ -17,7 +17,7 @@ embeddings = OpenAIEmbeddings(model="text-embedding-3-small", api_key=api_key)
 st_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
 COLLECTION_NAME = "pdf_docs"
-USE_OPENAI = False
+USE_OPENAI = True
 
 def init_collection(vector_size: int, collection_name="pdf_docs"):
     try:

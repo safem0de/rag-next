@@ -21,7 +21,6 @@ router = APIRouter()
 async def ingest_pdf(file: UploadFile = File(...)):
     try:
         temp_path = os.path.join(UPLOAD_DIR, file.filename)
-        logging.info(f"📄 Extracted {len(chunks)} chunks from file={file.filename}")
 
         # save file
         async with aiofiles.open(temp_path, "wb") as f:
