@@ -2,6 +2,8 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from langchain_openai import OpenAIEmbeddings
 from sentence_transformers import SentenceTransformer
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+import torch
 from dotenv import load_dotenv
 import os
 import uuid
@@ -11,20 +13,29 @@ logging.basicConfig(level=logging.INFO)
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
 
-# Connect Qdrant
+# Connect Qdrant, load embeddings
 qdrant = QdrantClient(url="http://localhost:6333")
 embeddings = OpenAIEmbeddings(model="text-embedding-3-small", api_key=api_key)
 st_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
+# load reranker
+reranker_model_name = "BAAI/bge-reranker-base" #"BAAI/bge-reranker-large"
+reranker_tokenizer = AutoTokenizer.from_pretrained(reranker_model_name)
+# reranker_model = AutoModelForSequenceClassification.from_pretrained(reranker_model_name)
+reranker_model = AutoModelForSequenceClassification.from_pretrained(
+    reranker_model_name,
+    torch_dtype=torch.float16,   # ใช้ half precision เร็วขึ้น
+    device_map="auto"            # ใช้ GPU ถ้ามี
+)
+
 COLLECTION_NAME = "pdf_docs"
 USE_OPENAI = True
 
+# --- collection management ---
 def init_collection(vector_size: int, collection_name="pdf_docs"):
     try:
-        # ถ้า collection มีอยู่แล้ว จะไม่ error
         qdrant.get_collection(collection_name=collection_name)
     except Exception:
-        # ถ้าไม่มี ให้สร้างใหม่
         qdrant.create_collection(
             collection_name=collection_name,
             vectors_config=models.VectorParams(
@@ -33,6 +44,7 @@ def init_collection(vector_size: int, collection_name="pdf_docs"):
             ),
         )
 
+# --- ingest ---
 def embed_and_store(chunks, payloads=None, collection="pdf_docs"):
     if USE_OPENAI:
         vectors = embeddings.embed_documents([c.page_content for c in chunks])
@@ -45,6 +57,7 @@ def embed_and_store(chunks, payloads=None, collection="pdf_docs"):
 
     init_collection(len(vectors[0]), collection)
 
+    # 🔧 merge payload ปลอดภัย
     qdrant.upsert(
         collection_name=collection,
         points=[
@@ -53,8 +66,8 @@ def embed_and_store(chunks, payloads=None, collection="pdf_docs"):
                 vector=vectors[i],
                 payload={
                     "text": chunks[i].page_content,
-                    **(payloads[i] if payloads else {}),
-                },
+                    **(payloads[i] if payloads and i < len(payloads) else {})
+                }
             )
             for i in range(len(chunks))
         ],
@@ -66,6 +79,7 @@ def embed_and_store(chunks, payloads=None, collection="pdf_docs"):
         "payload_samples": payloads[:2] if payloads else []
     }
 
+# --- search (เก่า) ---
 def query_vector_db(query: str, top_k: int = 5):
     if USE_OPENAI:
         vector = embeddings.embed_query(query)
@@ -86,3 +100,78 @@ def query_vector_db(query: str, top_k: int = 5):
         for r in results
     ]
 
+# --- search (ใหม่) ---
+def hybrid_search(query: str, top_k: int = 30, keyword: str = None, collection=COLLECTION_NAME):
+    if USE_OPENAI:
+        vector = embeddings.embed_query(query)
+    else:
+        vector = st_model.encode(query, convert_to_numpy=True)
+
+    query_filter = None
+    if keyword:
+        # 🔧 Qdrant ไม่มี MatchText ต้องใช้ MatchValue
+        query_filter = models.Filter(
+            must=[models.FieldCondition(key="text", match=models.MatchValue(value=keyword))]
+        )
+
+    results = qdrant.search(
+        collection_name=collection,
+        query_vector=vector,
+        limit=top_k,
+        query_filter=query_filter
+    )
+
+    return results
+
+# --- rerank ---
+def rerank_results(query: str, results, top_k: int = 5):
+    if not results:
+        logging.warning("⚠️ No candidates to rerank")
+        return []
+
+    # 🔧 ใช้ .payload ไม่ต้อง check `"payload" in r`
+    pairs = []
+    for r in results:
+        if not r.payload:
+            continue
+        doc_text = r.payload.get("text") or r.payload.get("raw")
+        if doc_text:
+            pairs.append((query, doc_text))
+
+    if not pairs:
+        logging.warning("⚠️ No valid text in candidates to rerank")
+        return []
+
+    inputs = reranker_tokenizer(
+        pairs,
+        padding=True,
+        truncation=True,
+        return_tensors="pt",
+        max_length=512
+    )
+
+    with torch.no_grad():
+        scores = reranker_model(**inputs).logits.squeeze(-1).tolist()
+
+    reranked = []
+    for r, s in zip(results, scores):
+        reranked.append({
+            "id": r.id,
+            "payload": r.payload,
+            "vector_score": r.score,
+            "rerank_score": float(s)
+        })
+
+    reranked = sorted(reranked, key=lambda x: x["rerank_score"], reverse=True)
+    return reranked[:top_k]
+
+# --- hybrid + rerank ---
+def query_hybrid_rerank(query: str, keyword: str = None, top_k: int = 5, collection=COLLECTION_NAME):
+    candidates = hybrid_search(query, top_k=30, keyword=keyword, collection=collection)
+
+    if not candidates:
+        logging.warning(f"⚠️ No candidates found for query='{query}'")
+        return []
+
+    reranked = rerank_results(query, candidates, top_k=top_k)
+    return reranked
