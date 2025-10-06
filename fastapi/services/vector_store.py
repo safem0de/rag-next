@@ -13,6 +13,13 @@ logging.basicConfig(level=logging.INFO)
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
 
+COLLECTION_NAME = "pdf_docs"
+USE_OPENAI = True
+
+# Environment setup
+device = "cuda" if torch.cuda.is_available() else "cpu"
+dtype = torch.float16 if device == "cuda" else torch.float32
+
 # Connect Qdrant, load embeddings
 qdrant = QdrantClient(url="http://localhost:6333")
 embeddings = OpenAIEmbeddings(model="text-embedding-3-small", api_key=api_key)
@@ -21,15 +28,10 @@ st_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 # load reranker
 reranker_model_name = "BAAI/bge-reranker-base" #"BAAI/bge-reranker-large"
 reranker_tokenizer = AutoTokenizer.from_pretrained(reranker_model_name)
-# reranker_model = AutoModelForSequenceClassification.from_pretrained(reranker_model_name)
 reranker_model = AutoModelForSequenceClassification.from_pretrained(
     reranker_model_name,
-    torch_dtype=torch.float16,   # ใช้ half precision เร็วขึ้น
-    device_map="auto"            # ใช้ GPU ถ้ามี
-)
-
-COLLECTION_NAME = "pdf_docs"
-USE_OPENAI = True
+    torch_dtype=dtype
+).to(device)
 
 # --- collection management ---
 def init_collection(vector_size: int, collection_name="pdf_docs"):
@@ -150,8 +152,13 @@ def rerank_results(query: str, results, top_k: int = 5):
         max_length=512
     )
 
+    inputs = {k: v.to(device) for k, v in inputs.items()}
+    inputs["input_ids"] = inputs["input_ids"].long()
+
     with torch.no_grad():
-        scores = reranker_model(**inputs).logits.squeeze(-1).tolist()
+        logits = reranker_model(**inputs).logits
+
+    scores = logits.squeeze(-1).tolist()
 
     reranked = []
     for r, s in zip(results, scores):

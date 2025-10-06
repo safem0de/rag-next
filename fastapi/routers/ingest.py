@@ -4,7 +4,7 @@ import aiofiles
 from langchain.docstore.document import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-from services.pdf_extractor import extract_pdf_content, preprocess_text
+from services.pdf_extractor import extract_pdf_content, preprocess_text, summarize_text
 from services.vector_store import embed_and_store
 
 import logging
@@ -38,11 +38,13 @@ async def ingest_pdf(file: UploadFile = File(...)):
         page_chunks = {}
         for t in texts:
             clean_text = preprocess_text(t["content"])
+            
+            summary = summarize_text(clean_text[:1000]) if len(clean_text) > 500 else ""
 
             # 3. Chunk ด้วย LangChain splitter
             splitter = RecursiveCharacterTextSplitter(
-                chunk_size=1000,
-                chunk_overlap=100,
+                chunk_size=1500,
+                chunk_overlap=150,
                 length_function=len
             )
             splits = splitter.split_text(clean_text)
@@ -54,6 +56,7 @@ async def ingest_pdf(file: UploadFile = File(...)):
                 documents.append(Document(page_content=s))
                 payloads.append({
                     "raw": clean_text,
+                    "summary": summary,
                     "page": t.get("page", None),
                     "source": file.filename
                 })
