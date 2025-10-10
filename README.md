@@ -45,3 +45,12 @@ Google models/embedding-001 → 768 dimensions
 2. User ถาม → encode question ด้วย OpenAI Embedding → ค้นหา context จาก Qdrant
 3. ส่ง context + question เข้า Gemini 1.5 Flash → ให้มัน generate คำตอบ
 embedding model กับ LLM model แยกกัน
+
+git checkout -b feature/auto-ingest-structured
+📄 PDF 
+ → 🧩 unstructured (แยก element)
+ → 🧠 structured parser (extract field เช่น ชื่อ / มูลค่า)
+ → 🪣 Qdrant (เก็บ 2 แบบ: vector + structured JSON)
+ → 🔍 hybrid search (ถ้า query เป็น natural language)
+ → 🧠 structured query (ถ้า query ระบุ field ชัดเจน)
+ → 📈 reranker (เฉพาะกรณี text retrieval)
