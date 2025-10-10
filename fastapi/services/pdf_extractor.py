@@ -10,12 +10,15 @@ IMG_DIR = "uploads/images"
 os.makedirs(IMG_DIR, exist_ok=True)
 
 MODEL_NAME = "csebuetnlp/mT5_multilingual_XLSum"
+
 tokenizer = AutoTokenizer.from_pretrained(
     MODEL_NAME,
     legacy=False,
     use_fast=False
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
+device = "cuda" if torch.cuda.is_available() else "cpu"
+model = model.to(device)
 
 def extract_pdf_content(pdf_path: str):
     doc = fitz.open(pdf_path)
@@ -62,7 +65,7 @@ def summarize_text(text: str, max_len: int = 150) -> str:
         return_tensors="pt",
         max_length=512,
         truncation=True
-    )
+    ).to(device)
     summary_ids = model.generate(
         inputs["input_ids"],
         num_beams=4,
