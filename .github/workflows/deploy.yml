@@ -53,25 +53,22 @@ jobs:
             echo "==> Pull new image"
             docker pull ghcr.io/${{ github.repository_owner }}/rag-fastapi:latest
 
-            echo "==> Pick docker compose command"
+            echo "==> Ensure docker-compose exists (install binary if missing)"
             if command -v docker-compose >/dev/null 2>&1; then
               DC="docker-compose"
-            elif docker compose version >/dev/null 2>&1; then
-              DC="docker compose"
             else
-              echo "docker compose not found, installing plugin..."
-              sudo apt-get update -y
-              sudo apt-get install -y docker-compose-plugin
-              DC="docker compose"
-              # ถ้ายังไม่มี docker compose หลังติดตั้ง plugin ลอง fallback เป็น docker-compose binary
-              if ! docker compose version >/dev/null 2>&1; then
-                echo "plugin ยังใช้ไม่ได้ ติดตั้ง docker-compose binary"
-                sudo apt-get install -y docker-compose
-                DC="docker-compose"
+              sudo apt-get update -y || true
+              sudo apt-get install -y docker-compose || true
+              if ! command -v docker-compose >/dev/null 2>&1; then
+                echo "Installing docker-compose binary directly..."
+                curl -L "https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-$(uname -s)-$(uname -m)" -o /tmp/docker-compose
+                sudo mv /tmp/docker-compose /usr/local/bin/docker-compose
+                sudo chmod +x /usr/local/bin/docker-compose
               fi
+              DC="docker-compose"
             fi
 
-            echo "==> Restart via docker compose"
+            echo "==> Restart via docker-compose"
             $DC down || true
             $DC up -d --force-recreate
 
