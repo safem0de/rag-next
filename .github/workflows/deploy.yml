@@ -44,6 +44,7 @@ jobs:
             set -e
 
             APP_DIR=${REMOTE_APP_DIR}
+            mkdir -p "$APP_DIR"
             cd "$APP_DIR"
 
             echo "==> Login GHCR"
@@ -52,8 +53,20 @@ jobs:
             echo "==> Pull new image"
             docker pull ghcr.io/${{ github.repository_owner }}/rag-fastapi:latest
 
-            echo "==> Restart via docker-compose"
-            docker compose down
-            docker compose up -d --force-recreate
+            echo "==> Pick docker compose command"
+            if docker compose version >/dev/null 2>&1; then
+              DC="docker compose"
+            elif command -v docker-compose >/dev/null 2>&1; then
+              DC="docker-compose"
+            else
+              echo "docker compose not found, installing plugin..."
+              sudo apt-get update -y
+              sudo apt-get install -y docker-compose-plugin
+              DC="docker compose"
+            fi
+
+            echo "==> Restart via docker compose"
+            $DC down || true
+            $DC up -d --force-recreate
 
             echo "==> Deployment completed!"
