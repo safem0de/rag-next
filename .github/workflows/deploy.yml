@@ -54,15 +54,21 @@ jobs:
             docker pull ghcr.io/${{ github.repository_owner }}/rag-fastapi:latest
 
             echo "==> Pick docker compose command"
-            if docker compose version >/dev/null 2>&1; then
-              DC="docker compose"
-            elif command -v docker-compose >/dev/null 2>&1; then
+            if command -v docker-compose >/dev/null 2>&1; then
               DC="docker-compose"
+            elif docker compose version >/dev/null 2>&1; then
+              DC="docker compose"
             else
               echo "docker compose not found, installing plugin..."
               sudo apt-get update -y
               sudo apt-get install -y docker-compose-plugin
               DC="docker compose"
+              # ถ้ายังไม่มี docker compose หลังติดตั้ง plugin ลอง fallback เป็น docker-compose binary
+              if ! docker compose version >/dev/null 2>&1; then
+                echo "plugin ยังใช้ไม่ได้ ติดตั้ง docker-compose binary"
+                sudo apt-get install -y docker-compose
+                DC="docker-compose"
+              fi
             fi
 
             echo "==> Restart via docker compose"
