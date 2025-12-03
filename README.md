@@ -55,6 +55,7 @@ git checkout -b feature/auto-ingest-structured
 - 🧠 structured query (ถ้า query ระบุ field ชัดเจน)
 - 📈 reranker (เฉพาะกรณี text retrieval)
 
-
+```bash
 docker build -t rag-fastapi .
 docker run --env-file .env -p 8000:8000 rag-fastapi
+```
