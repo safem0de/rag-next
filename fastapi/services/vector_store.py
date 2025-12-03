@@ -60,80 +60,85 @@ def init_collection(vector_size: int, collection_name="pdf_docs"):
         )
 
 # --- ingest ---
-def embed_and_store(chunks, payloads=None, collection="pdf_docs"):
-    """Embed chunks + store in Qdrant + extract metadata"""
-    enc = get_encoding("cl100k_base")
-    safe_chunks = []
-    max_token_limit = 8000  # สำหรับ text-embedding-3-small/large
-    max_total_tokens = 250000
+def _split_long_chunk(chunk, enc, chunk_index, max_token_limit, sub_chunk_limit):
+    """Split chunk into smaller pieces when token length exceeds the limit."""
+    text = chunk.page_content.strip()
+    tokens = len(enc.encode(text))
+    if tokens <= max_token_limit:
+        return [chunk]
 
-    # --- 1. ตรวจสอบและ split text ยาวเกิน limit ---
-    for i, c in enumerate(chunks):
-        text = c.page_content.strip()
-        tokens = len(enc.encode(text))
+    logging.warning(f"⚠️ Chunk {chunk_index} ยาวเกิน limit ({tokens} tokens) → แบ่งย่อย")
+    words = text.split()
+    sub_chunk = ""
+    sub_tokens = 0
+    new_chunks = []
 
-        if tokens > max_token_limit:
-            logging.warning(f"⚠️ Chunk {i} ยาวเกิน limit ({tokens} tokens) → แบ่งย่อย")
-            # แบ่ง text ย่อยเป็นส่วนละประมาณ 7000 tokens
-            words = text.split()
+    for word in words:
+        token_len = len(enc.encode(word))
+        if sub_tokens + token_len > sub_chunk_limit and sub_chunk.strip():
+            new_chunks.append(chunk.__class__(page_content=sub_chunk.strip()))
             sub_chunk = ""
             sub_tokens = 0
-            for w in words:
-                t_len = len(enc.encode(w))
-                if sub_tokens + t_len > 7000:
-                    safe_chunks.append(c.__class__(page_content=sub_chunk.strip()))
-                    sub_chunk = ""
-                    sub_tokens = 0
-                sub_chunk += " " + w
-                sub_tokens += t_len
-            if sub_chunk.strip():
-                safe_chunks.append(c.__class__(page_content=sub_chunk.strip()))
-        else:
-            safe_chunks.append(c)
 
+        sub_chunk += f" {word}"
+        sub_tokens += token_len
+
+    if sub_chunk.strip():
+        new_chunks.append(chunk.__class__(page_content=sub_chunk.strip()))
+
+    return new_chunks
+
+
+def _prepare_safe_chunks(chunks, enc, max_token_limit, sub_chunk_limit):
+    safe_chunks = []
+    for idx, chunk in enumerate(chunks):
+        safe_chunks.extend(_split_long_chunk(chunk, enc, idx, max_token_limit, sub_chunk_limit))
     logging.info(f"✅ รวมทั้งหมด {len(safe_chunks)} chunks หลังจากตรวจ limit")
+    return safe_chunks
 
-    # --- 2. embed ---
+
+def _embed_with_openai(safe_chunks, enc, max_total_tokens):
+    logging.info("🚀 เริ่มสร้าง embeddings ด้วย OpenAI แบบ batch...")
     vectors = []
+    current_batch = []
+    current_tokens = 0
+
+    for chunk in safe_chunks:
+        text = chunk.page_content.strip()
+        tokens = len(enc.encode(text))
+        if current_tokens + tokens > max_total_tokens:
+            logging.info(f"📦 ส่ง batch (รวม {len(current_batch)} chunks, {current_tokens} tokens)")
+            vectors.extend(embeddings.embed_documents(current_batch))
+            current_batch = []
+            current_tokens = 0
+
+        current_batch.append(text)
+        current_tokens += tokens
+
+    if current_batch:
+        logging.info(f"📦 ส่ง batch สุดท้าย (รวม {len(current_batch)} chunks, {current_tokens} tokens)")
+        vectors.extend(embeddings.embed_documents(current_batch))
+
+    logging.info(f"✅ สร้าง embeddings เสร็จทั้งหมด {len(vectors)} vectors")
+    return vectors
+
+
+def _embed_with_sentence_transformer(safe_chunks):
+    st = get_or_load_st_model()
+    return st.encode(
+        [c.page_content for c in safe_chunks],
+        convert_to_numpy=True,
+        show_progress_bar=True
+    )
+
+
+def _generate_vectors(safe_chunks, enc, max_total_tokens):
     if USE_OPENAI:
-        logging.info("🚀 เริ่มสร้าง embeddings ด้วย OpenAI แบบ batch...")
+        return _embed_with_openai(safe_chunks, enc, max_total_tokens)
+    return _embed_with_sentence_transformer(safe_chunks)
 
-        current_batch = []
-        current_tokens = 0
 
-        for i, c in enumerate(safe_chunks):
-            text = c.page_content.strip()
-            tokens = len(enc.encode(text))
-
-            # ถ้าเกิน limit รวม → ส่ง batch นี้ก่อน
-            if current_tokens + tokens > max_total_tokens:
-                logging.info(f"📦 ส่ง batch (รวม {len(current_batch)} chunks, {current_tokens} tokens)")
-                batch_vectors = embeddings.embed_documents(current_batch)
-                vectors.extend(batch_vectors)
-                current_batch = []
-                current_tokens = 0
-
-            current_batch.append(text)
-            current_tokens += tokens
-
-        # ส่ง batch สุดท้าย
-        if current_batch:
-            logging.info(f"📦 ส่ง batch สุดท้าย (รวม {len(current_batch)} chunks, {current_tokens} tokens)")
-            batch_vectors = embeddings.embed_documents(current_batch)
-            vectors.extend(batch_vectors)
-
-        logging.info(f"✅ สร้าง embeddings เสร็จทั้งหมด {len(vectors)} vectors")
-
-    else:
-        # ถ้าใช้ SentenceTransformer
-        st = get_or_load_st_model()
-        vectors = st.encode(
-            [c.page_content for c in safe_chunks],
-            convert_to_numpy=True,
-            show_progress_bar=True
-        )
-
-    # --- 3. สร้าง structured metadata ---
+def _extract_auto_metadata(safe_chunks):
     schemas = [
         ResponseSchema(name="person", description="ชื่อบุคคลหรือองค์กร"),
         ResponseSchema(name="wealth", description="มูลค่าทรัพย์สินหรือรายได้"),
@@ -143,7 +148,6 @@ def embed_and_store(chunks, payloads=None, collection="pdf_docs"):
     parser = StructuredOutputParser.from_response_schemas(schemas)
     format_instructions = parser.get_format_instructions()
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-
     prompt_template = ChatPromptTemplate.from_template(
         "Extract person, wealth, and industry from the following text.\n"
         "{format_instructions}\n\nText:\n{input_text}"
@@ -157,17 +161,33 @@ def embed_and_store(chunks, payloads=None, collection="pdf_docs"):
         )
         try:
             response = llm.invoke(prompt)
-            # parsed = parser.parse(response.content)
-            # logging.info(f"📄 Parsed metadata chunk {i}: {parsed}")
             raw_output = response.content.strip()
             logging.debug(f"🧩 Raw LLM output chunk {i}: {raw_output}")
             parsed = parser.parse(raw_output)
-        except Exception as e:
-            logging.warning(f"⚠️ Metadata extraction error ที่ chunk {i}: {e}")
+        except Exception as exc:
+            logging.warning(f"⚠️ Metadata extraction error ที่ chunk {i}: {exc}")
             parsed = {}
         auto_metadata.append(parsed)
+    return auto_metadata
 
-    # --- 4. upsert Qdrant ---
+
+def embed_and_store(chunks, payloads=None, collection="pdf_docs"):
+    """Embed chunks + store in Qdrant + extract metadata"""
+    enc = get_encoding("cl100k_base")
+    payloads = payloads or []
+    max_token_limit = 8000  # สำหรับ text-embedding-3-small/large
+    max_total_tokens = 250000
+    sub_chunk_limit = 7000
+
+    safe_chunks = _prepare_safe_chunks(chunks, enc, max_token_limit, sub_chunk_limit)
+    vectors = _generate_vectors(safe_chunks, enc, max_total_tokens)
+    if not vectors:
+        logging.warning("⚠️ No vectors generated; skipping upsert.")
+        return {"stored": 0, "collection": collection, "payload_samples": []}
+
+    init_collection(len(vectors[0]), collection_name=collection)
+    auto_metadata = _extract_auto_metadata(safe_chunks)
+
     qdrant.upsert(
         collection_name=collection,
         points=[
@@ -176,14 +196,14 @@ def embed_and_store(chunks, payloads=None, collection="pdf_docs"):
                 vector=vectors[i],
                 payload={
                     "text": safe_chunks[i].page_content,
-                    **(payloads[i] if payloads and i < len(payloads) else {}),
+                    **(payloads[i] if i < len(payloads) else {}),
                     **(auto_metadata[i] if i < len(auto_metadata) else {}),
                 }
             )
             for i in range(len(safe_chunks))
         ],
     )
-    
+
     logging.info(f"📦 Upserted {len(vectors)} points → {collection}")
     return {
         "stored": len(vectors),
