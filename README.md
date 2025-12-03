@@ -48,9 +48,12 @@ embedding model กับ LLM model แยกกัน
 
 git checkout -b feature/auto-ingest-structured
 📄 PDF 
- → 🧩 unstructured (แยก element)
- → 🧠 structured parser (extract field เช่น ชื่อ / มูลค่า)
- → 🪣 Qdrant (เก็บ 2 แบบ: vector + structured JSON)
- → 🔍 hybrid search (ถ้า query เป็น natural language)
- → 🧠 structured query (ถ้า query ระบุ field ชัดเจน)
- → 📈 reranker (เฉพาะกรณี text retrieval)
+- 🧩 unstructured (แยก element)
+- 🧠 structured parser (extract field เช่น ชื่อ / มูลค่า)
+- 🪣 Qdrant (เก็บ 2 แบบ: vector + structured JSON)
+- 🔍 hybrid search (ถ้า query เป็น natural language)
+- 🧠 structured query (ถ้า query ระบุ field ชัดเจน)
+- 📈 reranker (เฉพาะกรณี text retrieval)
+
+docker build -t rag-next
+docker run --env-file .env -p 8000:8000 rag-next
