@@ -9,7 +9,6 @@ env:
   IMAGE_NAME: rag-fastapi
   REGISTRY: ghcr.io
   OWNER: ${{ github.repository_owner }}
-  # ปรับให้ไม่ชนกับโฟลเดอร์ front-end ที่ใช้ /home/ubuntu/app
   REMOTE_APP_DIR: /home/ubuntu/rag-fastapi
 
 jobs:
@@ -19,23 +18,23 @@ jobs:
       contents: read
       packages: write
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Log in to GHCR
         run: echo "${{ secrets.GHCR_TOKEN }}" | docker login $REGISTRY -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
 
-      - name: Build image
+      - name: Build Docker Image
         run: docker build -t $REGISTRY/$OWNER/$IMAGE_NAME:latest .
 
-      - name: Push image
+      - name: Push Docker Image
         run: docker push $REGISTRY/$OWNER/$IMAGE_NAME:latest
 
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy on EC2 over SSH
+      - name: Deploy on EC2 via SSH
         uses: appleboy/ssh-action@v1.1.0
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -43,22 +42,18 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             set -e
-            APP_DIR=${REMOTE_APP_DIR:-/home/ubuntu/rag-fastapi}
-            mkdir -p "$APP_DIR"
+
+            APP_DIR=${REMOTE_APP_DIR}
             cd "$APP_DIR"
+
+            echo "==> Login GHCR"
             docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" -p "${{ secrets.GHCR_TOKEN }}"
+
+            echo "==> Pull new image"
             docker pull ghcr.io/${{ github.repository_owner }}/rag-fastapi:latest
 
-            CONTAINER_NAME=rag-fastapi
-            # หยุดและลบคอนเทนเนอร์เก่า (ถ้ามี)
-            if docker ps -a --format '{{.Names}}' | grep -w "$CONTAINER_NAME" >/dev/null 2>&1; then
-              docker stop "$CONTAINER_NAME" || true
-              docker rm "$CONTAINER_NAME" || true
-            fi
+            echo "==> Restart via docker-compose"
+            docker compose down
+            docker compose up -d --force-recreate
 
-            # รันคอนเทนเนอร์ใหม่ (ปรับพอร์ต/ไฟล์ env ตามที่ใช้จริง)
-            docker run -d \
-              --name "$CONTAINER_NAME" \
-              --env-file .env \
-              -p 8000:8000 \
-              ghcr.io/${{ github.repository_owner }}/rag-fastapi:latest
+            echo "==> Deployment completed!"

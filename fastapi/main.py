@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from routers import ingest, retrieve
+from routers import ingest, retrieve, auth
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
@@ -13,6 +13,7 @@ app.add_middleware(
 )
 
 # include router
+app.include_router(auth.router)
 app.include_router(ingest.router, prefix="/api", tags=["ingest"])
 app.include_router(retrieve.router, prefix="/api", tags=["retrieve"])
 

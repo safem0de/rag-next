@@ -1,0 +1,15 @@
+services:
+  rag-fastapi:
+    image: ghcr.io/safem0de/rag-fastapi:latest
+    container_name: rag-fastapi
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true

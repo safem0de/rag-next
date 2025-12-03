@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, UploadFile, File, Depends
 import os
 import aiofiles
 from langchain.docstore.document import Document
@@ -6,6 +6,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 from services.pdf_extractor import extract_pdf_content, preprocess_text, summarize_text
 from services.vector_store import embed_and_store
+from services.auth import verify_token
 
 import logging
 
@@ -14,7 +15,7 @@ logging.basicConfig(level=logging.INFO)
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(verify_token)])
 
 
 @router.post("/ingest")

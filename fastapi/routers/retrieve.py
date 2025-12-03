@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Depends
 from services.vector_store import query_hybrid_rerank
+from services.auth import verify_token
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(verify_token)])
 
 @router.get("/retrieve")
 async def retrieve_api(query: str = Query(...), top_k: int = Query(5), keyword: str = Query(None)):
