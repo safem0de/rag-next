@@ -16,6 +16,7 @@ from tiktoken import get_encoding
 logging.basicConfig(level=logging.INFO)
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
+QDRANT_URL = os.getenv("QDRANT_URL")
 
 COLLECTION_NAME = "pdf_docs"
 USE_OPENAI = True
@@ -25,7 +26,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 dtype = torch.float16 if device == "cuda" else torch.float32
 
 # Connect Qdrant, load embeddings
-qdrant = QdrantClient(url="http://localhost:6333")
+qdrant = QdrantClient(url=QDRANT_URL)
 embeddings = OpenAIEmbeddings(model="text-embedding-3-small", api_key=api_key)
 
 # load reranker

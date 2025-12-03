@@ -27,16 +27,18 @@ http://localhost:3001/upload
 ```
 
 ### .env.local
-INGEST_API_URL=http://localhost:8000
-OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
+QDRANT_URL = http://qdrant:6333
 
 ### ใช้ OpenAI
 ใน Python จะถูกอ่านอัตโนมัติ (ผ่าน langchain_openai.OpenAIEmbeddings)
 OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
 
-### ใช้ Gemini
-pip install google-generativeai sentence-transformers
-GEMINI_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxx
+### ยังไม่ implement ระบบ authen ของจริง
+FAKE_USERS_DEMO=demo
+FAKE_PASS_DEMO=change-me
+
+FAKE_USERS_ADMIN=admin
+FAKE_PASS_ADMIN=change-me
 
 
 OpenAI (text-embedding-3-small) → 1536 dimensions

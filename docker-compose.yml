@@ -8,8 +8,11 @@ services:
     ports:
       - "8000:8000"
     networks:
-      - proxy
+      proxy:
+      qdrant_default:
 
 networks:
   proxy:
+    external: true
+  qdrant_default:
     external: true
