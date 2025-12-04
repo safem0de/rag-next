@@ -45,7 +45,7 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             set -e
-            APP_DIR="${{ env.REMOTE_APP_DIR }}"
+            APP_DIR="/home/ubuntu/rag-fastapi"
             if [ -d "$APP_DIR" ]; then
               echo "Directory $APP_DIR already exists. Skipping creation."
             else
@@ -70,7 +70,7 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             set -euo pipefail
-            APP_DIR="${{ env.REMOTE_APP_DIR }}"
+            APP_DIR="/home/ubuntu/rag-fastapi"
             cd "$APP_DIR"
 
             if [ ! -f docker-compose.yml ]; then
