@@ -34,7 +34,10 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy on EC2 via SSH
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Ensure remote directory exists
         uses: appleboy/ssh-action@v1.1.0
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -42,34 +45,55 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             set -e
+            mkdir -p "${REMOTE_APP_DIR}"
 
-            APP_DIR=${REMOTE_APP_DIR}
-            mkdir -p "$APP_DIR"
+      - name: Upload docker-compose.yml
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "docker-compose.yml"
+          target: "${{ env.REMOTE_APP_DIR }}/"
+
+      - name: Deploy on EC2 via SSH
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -euo pipefail
+
+            APP_DIR="${REMOTE_APP_DIR}"
             cd "$APP_DIR"
 
-            echo "==> Login GHCR"
-            docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" -p "${{ secrets.GHCR_TOKEN }}"
+            if [ ! -f docker-compose.yml ]; then
+              echo "docker-compose.yml not found in ${APP_DIR}"
+              exit 1
+            fi
 
-            echo "==> Pull new image"
-            docker pull ghcr.io/${{ github.repository_owner }}/rag-fastapi:latest
+            echo "==> Log in to GHCR"
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
 
-            echo "==> Ensure docker-compose exists (install binary if missing)"
-            if command -v docker-compose >/dev/null 2>&1; then
-              DC="docker-compose"
-            else
-              sudo apt-get update -y || true
-              sudo apt-get install -y docker-compose || true
+            echo "==> Ensure docker-compose is installed"
+            if ! command -v docker-compose >/dev/null 2>&1; then
+              if command -v apt-get >/dev/null 2>&1; then
+                sudo apt-get update -y
+                sudo apt-get install -y docker-compose || true
+              fi
               if ! command -v docker-compose >/dev/null 2>&1; then
-                echo "Installing docker-compose binary directly..."
                 curl -L "https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-$(uname -s)-$(uname -m)" -o /tmp/docker-compose
                 sudo mv /tmp/docker-compose /usr/local/bin/docker-compose
                 sudo chmod +x /usr/local/bin/docker-compose
               fi
-              DC="docker-compose"
             fi
 
+            echo "==> Pull latest image(s)"
+            docker-compose -f docker-compose.yml pull
+
             echo "==> Restart via docker-compose"
-            $DC down || true
-            $DC up -d --force-recreate
+            docker-compose -f docker-compose.yml down --remove-orphans || true
+            docker-compose -f docker-compose.yml up -d --force-recreate --remove-orphans
 
             echo "==> Deployment completed!"
