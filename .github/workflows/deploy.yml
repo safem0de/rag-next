@@ -43,14 +43,9 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: REMOTE_APP_DIR
           script: |
             set -e
-            APP_DIR="${REMOTE_APP_DIR:-${{ env.REMOTE_APP_DIR }}}"
-            if [ -z "$APP_DIR" ]; then
-              echo "REMOTE_APP_DIR is not defined"
-              exit 1
-            fi
+            APP_DIR="${{ env.REMOTE_APP_DIR }}"
             if [ -d "$APP_DIR" ]; then
               echo "Directory $APP_DIR already exists. Skipping creation."
             else
@@ -73,14 +68,9 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: REMOTE_APP_DIR
           script: |
             set -euo pipefail
-            APP_DIR="${REMOTE_APP_DIR:-${{ env.REMOTE_APP_DIR }}}"
-            if [ -z "$APP_DIR" ]; then
-              echo "REMOTE_APP_DIR is not defined"
-              exit 1
-            fi
+            APP_DIR="${{ env.REMOTE_APP_DIR }}"
             cd "$APP_DIR"
 
             if [ ! -f docker-compose.yml ]; then
