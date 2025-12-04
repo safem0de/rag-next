@@ -46,8 +46,17 @@ jobs:
           envs: REMOTE_APP_DIR
           script: |
             set -e
-            APP_DIR="${{ env.REMOTE_APP_DIR }}"
-            mkdir -p "$APP_DIR"
+            APP_DIR="${REMOTE_APP_DIR:-${{ env.REMOTE_APP_DIR }}}"
+            if [ -z "$APP_DIR" ]; then
+              echo "REMOTE_APP_DIR is not defined"
+              exit 1
+            fi
+            if [ -d "$APP_DIR" ]; then
+              echo "Directory $APP_DIR already exists. Skipping creation."
+            else
+              mkdir -p "$APP_DIR"
+              echo "Created $APP_DIR"
+            fi
 
       - name: Upload docker-compose.yml
         uses: appleboy/scp-action@v0.1.7
@@ -67,7 +76,11 @@ jobs:
           envs: REMOTE_APP_DIR
           script: |
             set -euo pipefail
-            APP_DIR="${{ env.REMOTE_APP_DIR }}"
+            APP_DIR="${REMOTE_APP_DIR:-${{ env.REMOTE_APP_DIR }}}"
+            if [ -z "$APP_DIR" ]; then
+              echo "REMOTE_APP_DIR is not defined"
+              exit 1
+            fi
             cd "$APP_DIR"
 
             if [ ! -f docker-compose.yml ]; then
