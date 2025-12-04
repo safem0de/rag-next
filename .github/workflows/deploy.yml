@@ -45,7 +45,8 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             set -e
-            mkdir -p "${REMOTE_APP_DIR}"
+            APP_DIR="${{ env.REMOTE_APP_DIR }}"
+            mkdir -p "$APP_DIR"
 
       - name: Upload docker-compose.yml
         uses: appleboy/scp-action@v0.1.7
@@ -64,8 +65,7 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             set -euo pipefail
-
-            APP_DIR="${REMOTE_APP_DIR}"
+            APP_DIR="${{ env.REMOTE_APP_DIR }}"
             cd "$APP_DIR"
 
             if [ ! -f docker-compose.yml ]; then
